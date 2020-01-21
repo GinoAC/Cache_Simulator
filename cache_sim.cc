@@ -24,6 +24,7 @@ Event* event_tail;
 
 bool db = 0;
 
+//Cache settings
 int l1_sets = 64;
 int l2_sets = 1024;
 int l3_sets = 2048;
@@ -45,12 +46,21 @@ int l3_bw = 1;
 int l2_bw = 1;
 int l1_bw = 1;
 
+int blocksize = 64;
+
 uint64_t elapsed_second,
 		 elapsed_minute,
 		 elapsed_hour; 
 
 int main(int argc, char** argv)
 {
+	
+	if(argc < 5){
+		printf("Requires input of format: "\
+		"./main [# warmup instructions] [# simulation instructions] [trace file] [# of cache levels]\n");
+		return 0;
+	}
+
 	int IC = 0;
 	int limit;
 	uint64_t warmup;
@@ -69,7 +79,7 @@ int main(int argc, char** argv)
 	warmup = strtol(argv[1], &inter, 10);
 	limit = strtol(argv[2], &inter, 10);
 	
-	Cache L1(l1_sets, l1_ways, L1_lat, l1_bw, 1 << 1);
+	Cache L1(l1_sets, l1_ways, blocksize, L1_lat, l1_bw, 1 << 1);
 
 	handled_first = false;
 	handling_addr = 0;
@@ -81,13 +91,13 @@ int main(int argc, char** argv)
 	L1.lg2_sets = L1.lg2(L1.sets);
 	L1.lg2_blocks = L1.lg2(L1.blocksize);
 	
-	Cache L2(l2_sets, l2_ways, L2_lat, l1_bw, 1 << 2);
+	Cache L2(l2_sets, l2_ways, blocksize, L2_lat, l1_bw, 1 << 2);
 	L2.lg2_sets = L2.lg2(L2.sets);
 	L2.lg2_blocks = L2.lg2(L2.blocksize);
 	
 	L1.lower_cache = &L2;
 	
-	Cache L3(l3_sets, l3_ways, L3_lat, l1_bw, 1 << 3);
+	Cache L3(l3_sets, l3_ways, blocksize, L3_lat, l1_bw, 1 << 3);
 
 	L3.lg2_sets = L3.lg2(L3.sets);
 	L3.lg2_blocks = L3.lg2(L3.blocksize);
@@ -148,7 +158,7 @@ int main(int argc, char** argv)
 			}
 		}
 		
-		if(acc_cycle <= tick){
+		if(acc_cycle >= tick){
 			if( L1.add_to_queue(access) ){
 				queue_stall = false;
 				handled = true;

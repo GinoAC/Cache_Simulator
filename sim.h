@@ -110,9 +110,9 @@ class Packet{
 class Cache{
 
 	public:
-		int l1_sets = 64;
-		int l2_sets = 1024;
-		int l3_sets = 2048;
+		int l1_sets;
+		int l2_sets;
+		int l3_sets;
 
 
 		int sets,
@@ -166,64 +166,7 @@ class Cache{
 		//loading in data in perfect mode
 		bool* set_full_track;
 
-		/*Cache(int sets, int assoc, int delay, int level): sets(sets), 
-			assoc(assoc), latency(delay), level(level){
-			 
-
-			mm_latency = 200;
-	
-			queue_size = 64;
-			queue_total = 0;
-			qhead = 0;
-			qtail = 0;
-			
-			fill_queue_size = 64;
-			fill_total = 0;
-			fhead = 0;
-			ftail = 0;
-
-			mshr_size = 32;	
-			switch(level){
-				case 2: mshr_size = 8;  break;
-				case 4: mshr_size = 16; break;
-				case 8: mshr_size = 32; break;	
-				default: mshr_size = 1;				
-			}
-
-			mindex = 0;
-
-			hits = 0;
-			mshr_hits = 0;
-			pf_hits = 0;
-			misses = 0;
-			evictions = 0;
-			accesses = 0;
-			blocksize = 64;
-
-			cache_lines = new Block*[sets];
-
-			for(int a = 0; a < sets; a++){
-				cache_lines[a] = new Block[assoc];
-				for(int b =0; b < assoc; b++)
-					cache_lines[a][b].valid = 0;	
-			}
-			
-			req_queue = new Packet[queue_size];
-			fill_queue = new Packet[fill_queue_size];
-			mshr = new Packet[mshr_size];
-
-			for(int a = 0; a < queue_size; a++)
-				req_queue[a].valid = false;
-	
-			for(int a = 0; a < fill_queue_size; a++)
-				fill_queue[a].valid = false;
-		
-			for(int a =0; a < mshr_size; a++)
-				mshr[a].valid = false;
-
-		};*/
-
-		Cache(int sets, int assoc, int delay, int bw, int level);	
+		Cache(int sets, int assoc, int blocksize, int delay, int bw, int level);	
 	
 		std::vector<uint64_t> replacement_queue;
 						

@@ -1,7 +1,7 @@
 #include "sim.h"
 
-Cache::Cache(int sets, int assoc, int delay, int bw, int level): sets(sets), 
-	assoc(assoc), latency(delay), bandwidth_latency(bw), level(level){
+Cache::Cache(int sets, int assoc, int blocksize, int delay, int bw, int level): sets(sets), 
+	assoc(assoc), blocksize(blocksize), latency(delay), bandwidth_latency(bw), level(level){
 
 	bool handled;
 	uint64_t handling_addr;
@@ -46,7 +46,6 @@ Cache::Cache(int sets, int assoc, int delay, int bw, int level): sets(sets),
 	evictions = 0;
 	accesses = 0;
 	test_acc = 0;
-	blocksize = 64;
 
 	cache_lines = new Block*[sets];
     for(int a = 0; a < sets; a++){
