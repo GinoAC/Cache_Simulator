@@ -93,7 +93,7 @@ int main(int argc, char** argv)
 	uint64_t last_handling_tick = 0;
 
 	//Based on the number of levels specified, the cache hierarchy is built
-	Cache L1(l1_sets, l1_ways, blocksize, L1_lat, l1_bw, 1 << 1);
+	Cache L1(l1_sets, l1_ways, blocksize, L1_lat, l1_bw, Level::L1);
 
 	L1.lg2_sets = L1.lg2(L1.sets);
 	L1.lg2_blocks = L1.lg2(L1.blocksize);
@@ -101,8 +101,8 @@ int main(int argc, char** argv)
 	L1.upper_cache = NULL;
 	L1.lower_cache = NULL;
 	
-	Cache L2(l2_sets, l2_ways, blocksize, L2_lat, l1_bw, 1 << 2);
-	Cache L3(l3_sets, l3_ways, blocksize, L3_lat, l1_bw, 1 << 3);
+	Cache L2(l2_sets, l2_ways, blocksize, L2_lat, l1_bw, Level::L2);
+	Cache L3(l3_sets, l3_ways, blocksize, L3_lat, l1_bw, Level::L3);
 
 	if(levels >=2){	
 		L2.lg2_sets = L2.lg2(L2.sets);
@@ -162,7 +162,7 @@ int main(int argc, char** argv)
 				
 				//access = new Packet(rw, addr, 1, 0);//last one is timing
 
-				if(db)printf("\nacc_cycle %lx next_addr %lx inst %lu\n",
+				if(db)printf("\nacc_cycle %ld next_addr %lx inst %lu\n",
 					acc_cycle, addr, instructions);	
 
 				access.acc_cycle = acc_cycle;
@@ -179,17 +179,19 @@ int main(int argc, char** argv)
 				op++;
 			}
 		}
-		
-		if(acc_cycle >= tick){
+								//instructions 	
+		if(acc_cycle <= tick && (acc_num + op ) < (limit + warmup)){
 			if( L1.add_to_queue(access) ){
+				if(db && queue_stall) printf("queue no longer stalling\n");
 				queue_stall = false;
 				handled = true;
 			}else{
-				if(db)printf("que stalling\n");
+				if(db)printf("queue stalling acc cycle %ld tick %ld\n", acc_cycle, tick);
 				queue_stall = true;
 				handled = false;
 			}
-		}
+		}else if(db && (acc_num + op) >= (limit + warmup))
+			printf("waiting for queues to drain\n");
 
 		//printf("\n");
 		//BOOKMARK
@@ -217,12 +219,25 @@ int main(int argc, char** argv)
 			elapsed_minute -= elapsed_hour*60;
 			elapsed_second -= (elapsed_hour*3600 + elapsed_minute*60);
 			printf("Elapsed Simulation Time - %lu:%lu:%lu\n",elapsed_hour,elapsed_minute,elapsed_second);	
-			printf("@ IC %ld memop %d TICK %ld ACC_CYCLE %ld\n",instructions, op, tick, acc_cycle);
+			printf("@ IC %ld memop %d TICK %ld ACC_CYCLE %ld handled %d\n",instructions, op, tick, acc_cycle, handled);
 		}
 		//printf("%d OP AND SHOULD BE CHECKING %d\n",op, op >= (limit + warmup));
-		if(instructions >= (limit + warmup))
-			break;
-		if(instructions >= warmup && !warmed_up){
+		bool l1_finished = (L1.fhead == L1.ftail && L1.qhead == L1.qtail);
+		if((acc_num + op) >= (limit + warmup)){
+		
+			if(levels == 1 && l1_finished)	
+				break;
+			
+			bool l2_finished = (L2.fhead == L2.ftail && L2.qhead == L2.qtail);
+
+			if(levels == 2 && l1_finished && l2_finished)
+				break;
+
+			if(levels == 3 && l1_finished && l2_finished && L3.fhead == L3.ftail && L3.qhead == L3.qtail)
+				break;	
+		}
+
+		if((acc_num + op) >= warmup && !warmed_up){
 			warmed_up = true;
 			printf("Warmup complete. Instructions: %ld\n",instructions);
 
@@ -255,12 +270,12 @@ int main(int argc, char** argv)
 	elapsed_minute -= elapsed_hour*60;
 	elapsed_second -= (elapsed_hour*3600 + elapsed_minute*60);
 	printf("Elapsed Simulation Time - %lu:%lu:%lu\n",elapsed_hour,elapsed_minute,elapsed_second);	
-	printf("@ IC %ld memop %d TICK %ld ACC_CYCLE %ld\n",instructions, op, tick, acc_cycle);
+	printf("@ IC %d memop %d TICK %ld ACC_CYCLE %ld\n", op + acc_num, op, tick, acc_cycle);
 
 	printf("mem %d op %d\n",mems, op);
 
-	printf("IC %lu MC %d TICK %lx acc_cycle %lu\n", 
-		instructions, op, tick, last_acc_cycle); 
+	printf("IC %d MC %d TICK %lx acc_cycle %lu\n", 
+		op + acc_num, op, tick, last_acc_cycle); 
 
 	printf("STALLS: L3 %d L2 %d FILL_STALLS L3 %d L2 %d L1 %d REP_STALL L3 %d L2 %d L1 %d\n",
 	 	l3_stall, l2_stall, 
@@ -272,19 +287,19 @@ int main(int argc, char** argv)
 	printf("L1 hits %d pf_hits %d mshr_hits %d misses %d evictions %d access %d"\
 		" MPKI %lf ACCESS_CYCLES %lf AMAT %f test_acc %d\n", 
 		L1.hits, L1.pf_hits, L1.mshr_hits, L1.misses, L1.evictions, 
-		L1.accesses, float(L1.misses)/float((instructions-warmup)/1000), 
-		float(L1.ACCESS_CYCLES), float(L1.ACCESS_CYCLES)/float(acc_num), L1.test_acc);
+		L1.accesses, float(L1.misses)/float((op + acc_num - warmup)/1000), 
+		float(L1.ACCESS_CYCLES), float(L1.ACCESS_CYCLES)/float(acc_num), acc_num);
 	
 	if(levels >=2){	
 		printf("L2 hits %d pf_hits %d mshr_hits %d misses %d evictions %d access %d MPKI %lf\n", 
 			L2.hits, L2.pf_hits, L2.mshr_hits, L2.misses, L2.evictions, 
-			L2.accesses, float(L2.misses)/float((instructions-warmup)/1000));
+			L2.accesses, float(L2.misses)/float((op + acc_num -warmup)/1000));
 	}
 	
 	if(levels >=3){	
 		printf("L3 hits %d pf_hits %d mshr_hits %d misses %d evictions %d access %d MPKI %lf\n", 
 			L3.hits, L3.pf_hits, L3.mshr_hits, L3.misses, L3.evictions, 
-			L3.accesses, float(L3.misses)/float((instructions-warmup)/1000));
+			L3.accesses, float(L3.misses)/float((op + acc_num - warmup)/1000));
 	}
 
 	printf("Simulation complete in %ld clk cycles\n",tick);

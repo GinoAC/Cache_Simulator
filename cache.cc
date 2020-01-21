@@ -23,7 +23,7 @@ Cache::Cache(int sets, int assoc, int blocksize, int delay, int bw, int level): 
 	qhead = 0;
 	qtail = 0;
 	
-	fill_queue_size = 32;
+	fill_queue_size = 16;
 	fill_total = 0;
 	replacement_size = 32;
 	fhead = 0;
@@ -86,7 +86,7 @@ bool Cache::operate(){
 		//if its not a write hit on an clean block,
 		if(way != -1){
 			
-			if(lower_cache != NULL){//level != (1<<3)){
+			if(lower_cache != NULL){
 				if(lower_cache->get_way(lower_cache->get_set(addr),addr) != -1
 				&& lower_cache->cache_lines[lower_cache->get_set(addr)]
 				[lower_cache->get_way(lower_cache->get_set(addr),addr)].valid){
@@ -98,7 +98,7 @@ bool Cache::operate(){
 					assert(lower_cache->get_way(
 						lower_cache->get_set(addr),addr) == -1);
 				}
-			}else if(upper_cache != NULL){//level != (1 << 1)){
+			}else if(upper_cache != NULL){
 				assert(upper_cache->get_way(upper_cache->get_set(addr),addr) == -1);
 			}
 
@@ -111,7 +111,7 @@ bool Cache::operate(){
 			}
 
 			//If a hit in >L1	
-			if(upper_cache != NULL){//level != (1 << 1)){
+			if(upper_cache != NULL){
 				
  				//Since this is an exclusive cache, the data needs to 
  				//be put into the L1 fill queue and the current line 
@@ -121,7 +121,7 @@ bool Cache::operate(){
 				req_queue[qhead].nxt_time_step = tick + latency;
 				
 				Cache *tgt = upper_cache;
-				while(tgt->level != 1 << 1)
+				while(tgt->level != L1)
 					tgt = tgt->upper_cache;
 
 				if( tgt -> add_to_fill(req_queue[qhead]) == -1 ){
@@ -174,11 +174,11 @@ bool Cache::operate(){
 			}
 
 			//If there are more cache levels, add to queue			
-			if(lower_cache != NULL){//level != (1 << 3))
+			if(lower_cache != NULL){
 				//With the latency of the current level
 				req_queue[qhead].nxt_time_step = tick + latency;
 
-				if(mshr_loc < 0 && (level == 1 << 1)){
+				if(mshr_loc < 0 && (level == L1)){
 					//Add to MSHR. If the mshr is full, then stall
 					if ( !add_to_mshr(req_queue[qhead]) ){
 						return false;			
@@ -190,7 +190,7 @@ bool Cache::operate(){
 				if(!lower_cache -> add_to_queue(req_queue[qhead])){
 					req_queue[qhead].nxt_time_step -= latency;
 
-					if(level == 1 << 1){
+					if(level == L1){
 						mshr_loc = check_mshr(addr);
 						mshr[mshr_loc].valid = 0;
 					}
@@ -218,7 +218,7 @@ bool Cache::operate(){
 				//For a single level cache, it will go directly to main memory
 				if(upper_cache != NULL){	
 					Cache *tgt = upper_cache;
-					while(tgt->level != 1 << 1){
+					while(tgt->level != L1){
 						tgt = tgt->upper_cache;
 					}
 		
@@ -288,7 +288,6 @@ bool Cache::fill(){
 
 	update_replacement(vic_way, set, addr);
 	operate_replacement(vic_way, set, addr);
-	
 	
 	if(check_mshr(addr) > -1)
 		mshr[check_mshr(addr)].valid = 0;
@@ -369,6 +368,9 @@ bool Cache::add_to_queue(Packet &access){
 		qtail++;
 
 	queue_total++;
+
+	if(db) printf("added %lx to request queue\n", req_queue[qtail].addr);
+
 	return true;	
 
 }
