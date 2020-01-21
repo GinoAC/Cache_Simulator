@@ -222,18 +222,18 @@ int main(int argc, char** argv)
 			printf("@ IC %ld memop %d TICK %ld ACC_CYCLE %ld handled %d\n",instructions, op, tick, acc_cycle, handled);
 		}
 		//printf("%d OP AND SHOULD BE CHECKING %d\n",op, op >= (limit + warmup));
-		bool l1_finished = (L1.fhead == L1.ftail && L1.qhead == L1.qtail);
+		bool l1_finished = (L1.fill_total == 0 && L1.qhead == L1.qtail);
 		if((acc_num + op) >= (limit + warmup)){
 		
 			if(levels == 1 && l1_finished)	
 				break;
 			
-			bool l2_finished = (L2.fhead == L2.ftail && L2.qhead == L2.qtail);
+			bool l2_finished = (L2.fill_total == 0 && L2.qhead == L2.qtail);
 
 			if(levels == 2 && l1_finished && l2_finished)
 				break;
 
-			if(levels == 3 && l1_finished && l2_finished && L3.fhead == L3.ftail && L3.qhead == L3.qtail)
+			if(levels == 3 && l1_finished && l2_finished && L3.fill_total == 0 && L3.qhead == L3.qtail)
 				break;	
 		}
 

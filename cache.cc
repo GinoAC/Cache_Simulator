@@ -300,7 +300,7 @@ bool Cache::fill(){
 	}
 	
 	fill_queue[ridx].valid = false; //= empty;
-
+	fill_total--;
 	return true;	
 }
 
@@ -405,7 +405,7 @@ int Cache::add_to_fill(Packet &access){
 			fill_queue[x] = access;
 			fill_queue[x].valid = true;
 			fill_queue[x].origin = access.origin;
-
+			fill_total++;
 			return x;
 		}
 	}
@@ -422,7 +422,7 @@ bool Cache::add_to_mshr(Packet &access){
 
 	for(int a = 0; a < mshr_size; a++){
 		
-		if(mshr[a].valid  == false){
+		if(!mshr[a].valid){
 			mshr[a].read_write = access.read_write;
 			mshr[a].addr = access.addr;
 			mshr[a].fill_level = access.fill_level;
