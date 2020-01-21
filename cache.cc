@@ -30,13 +30,7 @@ Cache::Cache(int sets, int assoc, int blocksize, int delay, int bw, int level): 
 	ftail = 0;
 
 	mshr_size = 32;	
-/*			switch(level){
-		case 2: mshr_size = 8;  break;
-		case 4: mshr_size = 16; break;
-		case 8: mshr_size = 32; break;	
-		default: mshr_size = 1;				
-	}
-*/
+	
 	mindex = 0;
 
 	hits = 0;
@@ -76,20 +70,11 @@ Cache::Cache(int sets, int assoc, int blocksize, int delay, int bw, int level): 
 }
 
 bool Cache::operate(){
-	//printf("cache op %d\n",level);	
-	//tick++;
 	
 	//handle access
 	if(qtail != qhead && req_queue[qhead].nxt_time_step <= tick){
 		assert(qtail != qhead);
-		/*int po = qhead;
-		while(po != qtail){
-			printf("Req queue %lu %lu\n",req_queue[po].addr, req_queue[po].nxt_time_step);
-			if(po == queue_size-1)
-				po = 0;
-			else
-				po++;
-		}*/
+
 
 		//Get the head of the queue, if it is at the current time,
 		//execute it
@@ -98,29 +83,26 @@ bool Cache::operate(){
 		uint32_t set = get_set(addr);
 		int way = get_way(set, addr);
 
-		//printf("Request %lu\n",addr);
-
 		//if its not a write hit on an clean block,
 		if(way != -1){
 			
-			if(level != (1<<3)){
+			if(lower_cache != NULL){//level != (1<<3)){
 				if(lower_cache->get_way(lower_cache->get_set(addr),addr) != -1
 				&& lower_cache->cache_lines[lower_cache->get_set(addr)]
 				[lower_cache->get_way(lower_cache->get_set(addr),addr)].valid){
 					if(db)printf("current lvl %d head %d tail %d "\
-				"addr %lx low cache addr %lx\n",level/2,qhead,qtail,addr, 
+					"addr %lx low cache addr %lx\n",level/2,qhead,qtail,addr, 
 					lower_cache->cache_lines[lower_cache->get_set(addr)]
 							[lower_cache->get_way(
 							lower_cache->get_set(addr),addr)].addr);
 					assert(lower_cache->get_way(
-					lower_cache->get_set(addr),addr) == -1);
+						lower_cache->get_set(addr),addr) == -1);
 				}
-			}else if(level != (1 << 1)){
-				assert(upper_cache->get_way(upper_cache->
-				get_set(addr),addr) == -1);
+			}else if(upper_cache != NULL){//level != (1 << 1)){
+				assert(upper_cache->get_way(upper_cache->get_set(addr),addr) == -1);
 			}
 
-			if(level == (1 << 1)){
+			if(level == L1){
 				
 				handled_first = true;
 				cache_handled = true;
@@ -128,10 +110,8 @@ bool Cache::operate(){
 				handling_tick = tick;
 			}
 
-			//printf("hit on way %d\n",way);
-					
 			//If a hit in >L1	
-			if(level != 1 << 1){
+			if(upper_cache != NULL){//level != (1 << 1)){
 				
  				//Since this is an exclusive cache, the data needs to 
  				//be put into the L1 fill queue and the current line 
@@ -144,86 +124,25 @@ bool Cache::operate(){
 				while(tgt->level != 1 << 1)
 					tgt = tgt->upper_cache;
 
-				//if(level == 1 << 1)
-				//	printf("hit fill\n");
 				if( tgt -> add_to_fill(req_queue[qhead]) == -1 ){
 					req_queue[qhead].nxt_time_step -= latency;
-					//printf("failed to add to fill\n");
 					return false;	
 				}
 
-				//printf("removing %lu and lowering lru\n",
-				//	cache_lines[set][way].addr);
-
 				for(int a = 0; a < assoc; a++){
-					/*if(level == 1 << 2)
-						printf("way %d %lu lru %d v %d\n",
-							a, cache_lines[set][a].addr, 
-							cache_lines[set][a].lru, 
-							cache_lines[set][a].valid);*/
 					if(cache_lines[set][a].lru > cache_lines[set][way].lru)
 						cache_lines[set][a].lru--;
 				}
 
 				cache_lines[set][way].valid = false;
-
-				/*Cache *tgt = upper_cache;
-				int fill_idx[3] = {-1,-1,-1};
-				
-				bool fill_done = false;
-				bool fail_to_fill = false;	
-				while(!fill_done){
-					//Add it to the upper cache's fill
-					req_queue[qhead].nxt_time_step = tick + latency;
-					assert(lg2(tgt->level)-1 > -1);
-					fill_idx[lg2(tgt->level)-1] = tgt->add_to_fill(req_queue[qhead]);
-					if(fill_idx[lg2(tgt->level)-1]){
-						req_queue[qhead].nxt_time_step -= latency;
-						fail_to_fill = true;
-						break;
-					}
-		
-					if(tgt->upper_cache == NULL){
-						fill_done = true;
-						break;
-					}
-
-					tgt = tgt->upper_cache;
-				}
-
-				if(fail_to_fill){
-					fill_done = false;
-					tgt = upper_cache;
-					while(!fill_done){
-						assert(lg2(tgt->level)-1 > -1);
-						if(fill_idx[(tgt->level)-1] == -1){
-							return false;
-						}else{
-							fill_queue[fill_idx[lg2(tgt->level)-1]].valid = false;
-						}
-
-						if(tgt->upper_cache == NULL)
-							return false;
-						
-						tgt = tgt->upper_cache;
-					}
-				}*/
 			}
 
 			//BOOKMARK
 			//Update replacement to show hit
 			//update_replacement(way, set, addr );
 
-			//Can do L1 prefetcher
-			//if( level == 1 << 1)
-			//	prefetch(addr);
-			
 			//update q	
 			ACCESS_CYCLES += (tick - req_queue[qhead].acc_cycle);
-			//printf("HIT ACC %d tick %d cyc %d tick - req %d addr %lx\n",
-			//	ACCESS_CYCLES, tick, req_queue[qhead].acc_cycle, 
-			//	tick - req_queue[qhead].acc_cycle,
-			//	req_queue[qhead].addr);	
 			remove_queue(&req_queue[qhead]);
 	
 			if(!req_queue[qhead].pf)
@@ -251,20 +170,17 @@ bool Cache::operate(){
 					accesses++;
 					mshr_hits++;	
 				}
-/*				if( level == 1 << 1)
-					prefetch(addr);*/
 				return true;
 			}
 
 			//If there are more cache levels, add to queue			
-			if(level != (1 << 3)){
+			if(lower_cache != NULL){//level != (1 << 3))
 				//With the latency of the current level
 				req_queue[qhead].nxt_time_step = tick + latency;
 
 				if(mshr_loc < 0 && (level == 1 << 1)){
 					//Add to MSHR. If the mshr is full, then stall
 					if ( !add_to_mshr(req_queue[qhead]) ){
-						//printf("failed to add to mshr\n");
 						return false;			
 					}
 				}
@@ -278,14 +194,8 @@ bool Cache::operate(){
 						mshr_loc = check_mshr(addr);
 						mshr[mshr_loc].valid = 0;
 					}
-					//printf("failed to add to lower queue\n");
 					return false;
-				}else{
-					//printf("added to lower queue\n");
 				}
-				
-				/*if( level == 1 << 1)
-					prefetch(addr);*/
 
 				remove_queue(&req_queue[qhead]);
 				if(!req_queue[qhead].pf)
@@ -301,112 +211,34 @@ bool Cache::operate(){
 				//in 200cycles
 				//Add it to the upper cache's fill
 				req_queue[qhead].nxt_time_step = tick + mm_latency;
-
-				//fill this level
-				//int here_fill = add_to_fill(req_queue[qhead]);
-
-				//if(here_fill > -1)
-				//printf("ADDED TO L3\n");	
-				//Did not add it to the current level fill queue
-				/*if(here_fill == -1){
-					req_queue[qhead].nxt_time_step -= mm_latency;
-					return false;
-				}*/
-			
-				/*printf("tick %d rel %ld access addr %lu fill addr %lu %d %d\n",tick,
-						fill_queue[here_fill].nxt_time_step,
-						req_queue[qhead].addr,fill_queue[here_fill].addr, 
-						fill_queue[here_fill].valid, here_fill);*/
 			
 				bool fill_L1 = false;
-				
-				Cache *tgt = upper_cache;
-				while(tgt->level != 1 << 1){
-					tgt = tgt->upper_cache;
-				}
-	
-				if( tgt -> add_to_fill(req_queue[qhead]) == -1){
-					req_queue[qhead].nxt_time_step -= mm_latency;
-					return false;	
-				}
-	
-				/*
-				Cache *tgt = upper_cache;
-				int fill_idx[3] = {-1,-1,-1};
-
-				bool fill_done = false;
-				bool fail_to_fill = false;	
-				int i = 0;
-
-				while(!fill_done){
-					i = lg2(tgt->level)-1;
-					//Add it to the upper cache's fill
-					req_queue[qhead].nxt_time_step = tick + mm_latency;
-					fill_queue[here_fill].valid = false;
-					fill_idx[i] = tgt->add_to_fill(req_queue[qhead]);
-
-					assert(i > -1);
-
-					if(fill_idx[i] < -1){
-						req_queue[qhead].nxt_time_step -= mm_latency;
-						fail_to_fill = true;
-						break;
-					}
-					
-					if(tgt->upper_cache == NULL){
-						fill_done = true;
-						break;
-					}
-
-					tgt = tgt->upper_cache;
-				}
-
-
-				if(fail_to_fill){
-					fill_done = false;
-					fill_queue[here_fill].valid = false;
-					tgt = upper_cache;
-					while(!fill_done){
-						assert(lg2(tgt->level)-1 > -1);
-						if(fill_idx[lg2(tgt->level)-1] == -1){
-							return false;
-						}else{
-							fill_queue[fill_idx[lg2(tgt->level)-1]].valid = false;
-						}
-
-						if(tgt->upper_cache == NULL)
-							return false;
-						
+			
+				//For cache configurations with more than one level, it will go to the L1 after accessing MM
+				//For a single level cache, it will go directly to main memory
+				if(upper_cache != NULL){	
+					Cache *tgt = upper_cache;
+					while(tgt->level != 1 << 1){
 						tgt = tgt->upper_cache;
 					}
-				}*/	
-			
-				/*if(lower_cache->add_to_fill(req_queue[qhead])){
-					req_queue[qhead].nxt_time_step -= mm_latency;
-
-					//remove the entry from the current fill queue
-					fill_queue[fill_idx]->valid = false;
-					return false;
-				}*/
-				/*if(!make_rfo && mshr_loc != -1){
-					//Add to MSHR. If the mshr is full, then stall
-					if ( !add_to_mshr(req_queue[qhead]) ){
-						return false;			
+		
+					if( tgt -> add_to_fill(req_queue[qhead]) == -1){
+						req_queue[qhead].nxt_time_step -= mm_latency;
+						return false;	
 					}
-				}*/
+				}else{
+					if(add_to_fill(req_queue[qhead]) == -1){
+						req_queue[qhead].nxt_time_step -= mm_latency;
+						return false;
+					}	
+				}
 			}
 			
-			/*if( level == 1 << 1)
-				prefetch(addr);*/
 			remove_queue(&req_queue[qhead]);	
-			//if(!req_queue[qhead].pf)
 			misses++;
 			accesses++;
 			return true;	
 		}
-		//prefetch	
-		//if( level == 1 << 1)
-		//	prefetch(addr);	
 	}
 		
 	return false;
@@ -437,7 +269,6 @@ bool Cache::fill(){
 
 	//Nothing to fill so no reason to continue
 	if( ridx == -1){
-		//printf("DIDN'T FILL\n");
 		return false;
 	}
 
@@ -459,34 +290,18 @@ bool Cache::fill(){
 	operate_replacement(vic_way, set, addr);
 	
 	
-	//printf("perf fill %d %lu \n", check_mshr(addr),addr);
 	if(check_mshr(addr) > -1)
 		mshr[check_mshr(addr)].valid = 0;
-		//remove_mshr(&mshr[check_mshr(addr)]);
 
-	//}
 	//Packet empty;
 	uint64_t a = fill_queue[ridx].addr;
 
-	if(level == 1 << 1 && !fill_queue[ridx].pf){
+	if(level == L1 && !fill_queue[ridx].pf){
 		ACCESS_CYCLES += tick - fill_queue[ridx].acc_cycle;
-		//printf("FILL ACC %lx tick %d cyc %d tick - req %d addr %lx\n",
-		//		ACCESS_CYCLES, tick, fill_queue[ridx].acc_cycle, 
-		//		tick - fill_queue[ridx].acc_cycle,
-		//		fill_queue[ridx].addr);	
 	}
-	
-	//assert(fill_queue[ridx].nxt_time_step == event_head->time);
 	
 	fill_queue[ridx].valid = false; //= empty;
 
-	//pop_event_queue();
-	
-	//if(check_fill(a) != false)
-	//	printf("invalidating fill entry %lx\n",fill_queue[ridx].addr);
-	//
-	//assert(check_fill(a) == false);
-	//
 	return true;	
 }
 
@@ -511,9 +326,7 @@ bool Cache::set_full(uint32_t set){
 
 int Cache::get_way(uint32_t set, uint64_t addr){
 	for(int a = 0; a < assoc; a++){
-		if(((cache_lines[set][a].addr >> (lg2_blocks))
-			== ((addr) >> (lg2_blocks))) && cache_lines[set][a].valid){
-			//printf("hit on %lx\n",cache_lines[set][a].addr);
+		if(((cache_lines[set][a].addr >> (lg2_blocks)) == ((addr) >> (lg2_blocks))) && cache_lines[set][a].valid){
 			return a;	
 		}
 	}
@@ -543,23 +356,17 @@ uint32_t Cache::get_page(uint64_t addr){
 
 bool Cache::add_to_queue(Packet &access){
 	
-	if(queue_total == queue_size - 1)
+	if(queue_total == (queue_size - 1))
 		return false;	
 
-	//Packet acc(access.read_write, access.addr,
-	//   access.fill_level, access.nxt_time_step);
-
 	uint64_t time = access.nxt_time_step;
-	
+
 	req_queue[qtail] = access;
 	
 	if(qtail == queue_size - 1)
 		qtail = 0;
 	else
 		qtail++;
-
-	//printf("adding time %lx\n", time);
-	//push_event_queue(time);
 
 	queue_total++;
 	return true;	
@@ -568,14 +375,6 @@ bool Cache::add_to_queue(Packet &access){
 
 void Cache::remove_queue(Packet *access){
 	//Remove from queue
-	//Packet empty;
-	//*req_queue[qhead] = empty;	
-
-	//printf("nxt time %lx time %lx\n",access->nxt_time_step, event_head->time);
-	//assert(access->nxt_time_step == event_head->time);
-
-	//if(num_events != 0)
-	//	pop_event_queue();
 
 	Packet empty;
 	*access = empty;
@@ -591,23 +390,9 @@ void Cache::remove_queue(Packet *access){
 void Cache::remove_mshr(Packet *access){
 	Packet empty;
 	*access = empty;
-	/*for(int a = 0; a < mshr_size; a++){
-		if(align(mshr[a].addr) == align(access.addr) && mshr[a].valid){
-			Packet empty;
-			*mshr[a] = empty;	
-		}
-	}*/	
 }
 
 int Cache::add_to_fill(Packet &access){
-
-	//printf("Adding %lx to the fill queue of level %d\n",access.addr,level);
-	/*if(level == 1 << 3){
-		printf("before\n");
-		for(int a = 0; a < fill_queue_size; a++)
-			printf("a %d  addr %lu val %d\n",
-				a, fill_queue[a].addr, fill_queue[a].valid);
-	}*/
 
 	for(int x = 0; x < fill_queue_size; x++){
 
@@ -615,41 +400,15 @@ int Cache::add_to_fill(Packet &access){
 			Packet acc(access.read_write, access.addr,
 					   access.fill_level, access.nxt_time_step);
 		
-			//if(level == 1 << 1)
-			//	printf("adding access %lu to l1 fill %lu\n",
-			//		access.addr, acc.addr);			
-			
 			fill_queue[x] = access;
 			fill_queue[x].valid = true;
 			fill_queue[x].origin = access.origin;
 
-			//push_event_queue(access.nxt_time_step);
-
-			/*
-			if(level == 1 << 3){
-				printf("after\n");
-				for(int a = 0; a < fill_queue_size; a++)
-					printf("a %d  addr %lu val %d\n",
-					a, fill_queue[a].addr, fill_queue[a].valid);
-				printf("returning x %d\n",x);
-			}
-			*/
-			
 			return x;
 		}
 	}
 
 	return -1;
-/*	if(fill_total == fill_queue_size - 1)
-		return false;	
-
-	fill_queue[ftail] = access;
-	if(ftail == fill_queue_size - 1)
-		ftail = 0;
-	else
-		ftail++;
-
-	fill_total++;*/
 }
 
 int Cache::add_to_replacement(Packet &access){
@@ -660,12 +419,9 @@ int Cache::add_to_replacement(Packet &access){
 bool Cache::add_to_mshr(Packet &access){
 
 	for(int a = 0; a < mshr_size; a++){
-		//printf("mshr %d %lu %d %d\n",a,mshr[a].addr, mshr[a].valid, mshr_size);
 		
 		if(mshr[a].valid  == false){
-			//Packet acc(access.read_write, access.addr,
-			//		   access.fill_level, access.nxt_time_step);
-			mshr[a].read_write = access.read_write; // = acc;
+			mshr[a].read_write = access.read_write;
 			mshr[a].addr = access.addr;
 			mshr[a].fill_level = access.fill_level;
 			mshr[a].nxt_time_step = access.nxt_time_step;
@@ -756,7 +512,6 @@ bool Cache::push_event_queue(uint64_t time){
 
 	Event* e = new Event();
 	e->time = time;
-	//e->level = level;
 	
 	if(num_events == 0){
 		event_head = e;

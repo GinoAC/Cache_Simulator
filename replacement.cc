@@ -12,7 +12,7 @@ void Cache::update_replacement(uint8_t way, uint32_t set, uint64_t addr){
 void Cache::operate_replacement(uint8_t victim, 
 								uint32_t set, uint64_t addr){
 
-	if(level != (1 << 3) && cache_lines[set][victim].valid){
+	if(lower_cache != NULL && cache_lines[set][victim].valid){
 		Packet evict( 0, cache_lines[set][victim].addr, 0, latency); 
 		if(lower_cache -> add_to_fill(evict) == -1){
 			evictions++;	

@@ -26,6 +26,8 @@ extern uint64_t num_events;
 
 using namespace std;
 
+enum Level{ L1, L2, L3};
+
 struct Event{
 	public: 
 
@@ -113,7 +115,6 @@ class Cache{
 		int l1_sets;
 		int l2_sets;
 		int l3_sets;
-
 
 		int sets,
 			assoc,

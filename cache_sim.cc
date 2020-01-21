@@ -24,13 +24,18 @@ Event* event_tail;
 
 bool db = 0;
 
-//Cache settings
-int l1_sets = 64;
+////////////Cache settings\\\\\\\\\\\\\\\\\\
+//Cache Capacity = (sets * assoc * blocksize)
+int blocksize = 64;
+
+int l1_sets = 128;
 int l2_sets = 1024;
 int l3_sets = 2048;
+
 int l1_ways = 4;
 int l2_ways = 8;
 int l3_ways = 16;
+//////////////\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
 int l3_stall = 0;
 int l2_stall = 0;
@@ -46,7 +51,6 @@ int l3_bw = 1;
 int l2_bw = 1;
 int l1_bw = 1;
 
-int blocksize = 64;
 
 uint64_t elapsed_second,
 		 elapsed_minute,
@@ -62,8 +66,9 @@ int main(int argc, char** argv)
 	}
 
 	int IC = 0;
-	int limit;
 	uint64_t warmup;
+	int limit;
+	int levels;
 	char* inter;
 	time_t timer;
 	struct tm exe = {0};
@@ -78,34 +83,45 @@ int main(int argc, char** argv)
 
 	warmup = strtol(argv[1], &inter, 10);
 	limit = strtol(argv[2], &inter, 10);
-	
-	Cache L1(l1_sets, l1_ways, blocksize, L1_lat, l1_bw, 1 << 1);
+	levels = strtol(argv[4], &inter, 10);
 
+	
 	handled_first = false;
 	handling_addr = 0;
 	handling_tick = 0;
 
 	uint64_t last_handling_tick = 0;
 
+	//Based on the number of levels specified, the cache hierarchy is built
+	Cache L1(l1_sets, l1_ways, blocksize, L1_lat, l1_bw, 1 << 1);
 
 	L1.lg2_sets = L1.lg2(L1.sets);
 	L1.lg2_blocks = L1.lg2(L1.blocksize);
 	
+	L1.upper_cache = NULL;
+	L1.lower_cache = NULL;
+	
 	Cache L2(l2_sets, l2_ways, blocksize, L2_lat, l1_bw, 1 << 2);
-	L2.lg2_sets = L2.lg2(L2.sets);
-	L2.lg2_blocks = L2.lg2(L2.blocksize);
-	
-	L1.lower_cache = &L2;
-	
 	Cache L3(l3_sets, l3_ways, blocksize, L3_lat, l1_bw, 1 << 3);
 
-	L3.lg2_sets = L3.lg2(L3.sets);
-	L3.lg2_blocks = L3.lg2(L3.blocksize);
+	if(levels >=2){	
+		L2.lg2_sets = L2.lg2(L2.sets);
+		L2.lg2_blocks = L2.lg2(L2.blocksize);
+		
+		L1.lower_cache = &L2;
+		L2.lower_cache = NULL;
+		L2.upper_cache = &L1;
+	}
 
-	L2.lower_cache = &L3;
-	L3.upper_cache = &L2;
-	L2.upper_cache = &L1;
-	L1.upper_cache = NULL;
+	if(levels >= 3){
+
+		L3.lg2_sets = L3.lg2(L3.sets);
+		L3.lg2_blocks = L3.lg2(L3.blocksize);
+		
+		L2.lower_cache = &L3;
+		L3.lower_cache = NULL;
+		L3.upper_cache = &L2;
+	}
 
 	ifstream trace_file;
 
@@ -139,12 +155,16 @@ int main(int argc, char** argv)
 
 			trace_file >> acc_cycle;
 			trace_file >> mem;
+
 			if(mem){
 				trace_file >> rw >> addr;
 				trace_file >> instructions;
+				
 				//access = new Packet(rw, addr, 1, 0);//last one is timing
+
 				if(db)printf("\nacc_cycle %lx next_addr %lx inst %lu\n",
 					acc_cycle, addr, instructions);	
+
 				access.acc_cycle = acc_cycle;
 				access.read_write = rw;
 				access.addr = addr,
@@ -152,7 +172,9 @@ int main(int argc, char** argv)
 				access.nxt_time_step = acc_cycle + L1.latency;
 				mems++;
 				handled = false;
-				op++;
+
+				acc_num++;
+
 			}else{
 				op++;
 			}
@@ -171,22 +193,21 @@ int main(int argc, char** argv)
 
 		//printf("\n");
 		//BOOKMARK
-		L3.fill();
-		if( !L3.operate() ){
-		}else{
-			//L3.accesses++;
-		}	
-		L2.fill();
-		if( !L2.operate() ){
-		}else{
-			//L2.accesses++;
-		}	
-		L1.fill();
-		if(	!L1.operate() ){
-		}else{
-			//L1.accesses++;
+		switch(levels){
+			case 3:
+				L3.fill();
+				L3.operate();
+			case 2:
+				L2.fill();
+				L2.operate();
+			case 1:
+				L1.fill();
+				L1.operate();
+			break;
+			default:
+				assert(false);
 		}
-					
+
 		tick++;
 		if(tick % 10000000 == 0){
 			
@@ -204,17 +225,25 @@ int main(int argc, char** argv)
 		if(instructions >= warmup && !warmed_up){
 			warmed_up = true;
 			printf("Warmup complete. Instructions: %ld\n",instructions);
+
 			L1.accesses = 0;
 			L1.hits = 0;
 			L1.misses = 0;
-			L2.accesses = 0;
-			L2.hits = 0;
-			L2.misses = 0;
-			L3.accesses = 0;
-			L3.hits = 0;
-			L3.misses = 0;
 			L1.evictions = 0;
-			L2.evictions = 0;	
+			
+			if(levels >=2){	
+				L2.accesses = 0;
+				L2.hits = 0;
+				L2.misses = 0;
+				L2.evictions = 0;	
+			}
+	
+			if(levels >=2){	
+				L3.accesses = 0;
+				L3.hits = 0;
+				L3.misses = 0;
+				L3.evictions = 0;	
+			}
 		}
 	}
 	
@@ -244,13 +273,19 @@ int main(int argc, char** argv)
 		" MPKI %lf ACCESS_CYCLES %lf AMAT %f test_acc %d\n", 
 		L1.hits, L1.pf_hits, L1.mshr_hits, L1.misses, L1.evictions, 
 		L1.accesses, float(L1.misses)/float((instructions-warmup)/1000), 
-		float(L1.ACCESS_CYCLES), float(L1.ACCESS_CYCLES)/float(op), L1.test_acc);
-	printf("L2 hits %d pf_hits %d mshr_hits %d misses %d evictions %d access %d MPKI %lf\n", 
-		L2.hits, L2.pf_hits, L2.mshr_hits, L2.misses, L2.evictions, 
-		L2.accesses, float(L2.misses)/float((instructions-warmup)/1000));
-	printf("L3 hits %d pf_hits %d mshr_hits %d misses %d evictions %d access %d MPKI %lf\n", 
-		L3.hits, L3.pf_hits, L3.mshr_hits, L3.misses, L3.evictions, 
-		L3.accesses, float(L3.misses)/float((instructions-warmup)/1000));
+		float(L1.ACCESS_CYCLES), float(L1.ACCESS_CYCLES)/float(acc_num), L1.test_acc);
+	
+	if(levels >=2){	
+		printf("L2 hits %d pf_hits %d mshr_hits %d misses %d evictions %d access %d MPKI %lf\n", 
+			L2.hits, L2.pf_hits, L2.mshr_hits, L2.misses, L2.evictions, 
+			L2.accesses, float(L2.misses)/float((instructions-warmup)/1000));
+	}
+	
+	if(levels >=3){	
+		printf("L3 hits %d pf_hits %d mshr_hits %d misses %d evictions %d access %d MPKI %lf\n", 
+			L3.hits, L3.pf_hits, L3.mshr_hits, L3.misses, L3.evictions, 
+			L3.accesses, float(L3.misses)/float((instructions-warmup)/1000));
+	}
 
 	printf("Simulation complete in %ld clk cycles\n",tick);
 
