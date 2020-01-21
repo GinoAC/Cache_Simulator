@@ -325,7 +325,10 @@ bool Cache::set_full(uint32_t set){
 
 int Cache::get_way(uint32_t set, uint64_t addr){
 	for(int a = 0; a < assoc; a++){
-		if(((cache_lines[set][a].addr >> (lg2_blocks)) == ((addr) >> (lg2_blocks))) && cache_lines[set][a].valid){
+		if(!cache_lines[set][a].valid)
+			continue;
+
+		if(((cache_lines[set][a].addr >> (lg2_blocks)) == ((addr) >> (lg2_blocks)))){
 			return a;	
 		}
 	}
@@ -381,10 +384,11 @@ void Cache::remove_queue(Packet *access){
 	Packet empty;
 	*access = empty;
 	access->valid = false;
-	if(qhead == queue_size - 1)
-		qhead = 0;
-	else	
-		qhead++;
+	qhead = (qhead == (queue_size - 1)) ? 0 : qhead+1;
+	//if(qhead == (queue_size - 1))
+	//	qhead = 0;
+	//else	
+	//	qhead++;
 
 	queue_total--;
 }
@@ -403,8 +407,8 @@ int Cache::add_to_fill(Packet &access){
 					   access.fill_level, access.nxt_time_step);
 		
 			fill_queue[x] = access;
-			fill_queue[x].valid = true;
 			fill_queue[x].origin = access.origin;
+			fill_queue[x].valid = true;
 			fill_total++;
 			return x;
 		}

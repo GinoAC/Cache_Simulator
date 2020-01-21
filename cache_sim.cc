@@ -219,7 +219,7 @@ int main(int argc, char** argv)
 			elapsed_minute -= elapsed_hour*60;
 			elapsed_second -= (elapsed_hour*3600 + elapsed_minute*60);
 			printf("Elapsed Simulation Time - %lu:%lu:%lu\n",elapsed_hour,elapsed_minute,elapsed_second);	
-			printf("@ IC %ld memop %d TICK %ld ACC_CYCLE %ld handled %d\n",instructions, op, tick, acc_cycle, handled);
+			printf("@ IC %d memop %d TICK %ld ACC_CYCLE %ld\n", acc_num + op, op, tick, acc_cycle);
 		}
 		//printf("%d OP AND SHOULD BE CHECKING %d\n",op, op >= (limit + warmup));
 		bool l1_finished = (L1.fill_total == 0 && L1.qhead == L1.qtail);
